@@ -12,85 +12,43 @@ beforeEach(() => {
 });
 
 describe('User Registration', () => {
-  it('returns 200 OK when signup request is valid', (done) => {
-    request(app)
-      .post('/api/1.0/users')
-      .send({
-        username: 'user',
-        email: 'user@user.com',
-        password: 'P4word',
-      })
-      .then((response) => {
-        expect(response.status).toBe(200);
-        done();
-      });
+  const validUserData = () => {
+    return request(app).post('/api/1.0/users').send({
+      username: 'user',
+      email: 'user@user.com',
+      password: 'P4word',
+    });
+  };
+
+  it('returns 200 OK when signup request is valid', async () => {
+    const response = await validUserData();
+    expect(response.status).toBe(200);
   });
 
-  it('returns success message when signup request is valid', (done) => {
-    request(app)
-      .post('/api/1.0/users')
-      .send({
-        username: 'user',
-        email: 'user@user.com',
-        password: 'P4word',
-      })
-      .then((response) => {
-        expect(response.body.message).toBe('User created');
-        done();
-      });
+  it('returns success message when signup request is valid', async () => {
+    const response = await validUserData();
+    expect(response.body.message).toBe('User created');
   });
 
-  it('saves the users to database', (done) => {
-    request(app)
-      .post('/api/1.0/users')
-      .send({
-        username: 'user',
-        email: 'user@user.com',
-        password: 'P4word',
-      })
-      .then(() => {
-        //query user table
-        User.findAll().then((userList) => {
-          expect(userList.length).toBe(1);
-          done();
-        });
-      });
+  it('saves the users to database', async () => {
+    await validUserData();
+    const userList = await User.findAll();
+    expect(userList.length).toBe(1);
   });
 
-  it('saves the users and email to database', (done) => {
-    request(app)
-      .post('/api/1.0/users')
-      .send({
-        username: 'user',
-        email: 'user@user.com',
-        password: 'P4word',
-      })
-      .then(() => {
-        //query user table
-        User.findAll().then((userList) => {
-          const savedUser = userList[0];
-          expect(savedUser.username).toBe('user');
-          expect(savedUser.email).toBe('user@user.com');
-          done();
-        });
-      });
+  it('saves the users and email to database', async () => {
+    await validUserData();
+    const userList = await User.findAll();
+    const savedUser = userList[0];
+    expect(savedUser.username).toBe('user');
+    expect(savedUser.email).toBe('user@user.com');
   });
 
-  it('hashes the password in database', (done) => {
-    request(app)
-      .post('/api/1.0/users')
-      .send({
-        username: 'user',
-        email: 'user@user.com',
-        password: 'P4word',
-      })
-      .then(() => {
-        //query user table
-        User.findAll().then((userList) => {
-          const savedUser = userList[0];
-          expect(savedUser.password).not.toBe('P4word');
-          done();
-        });
-      });
+  it('hashes the password in database', async () => {
+    await validUserData();
+    //query user table
+    const userList = await User.findAll();
+    const savedUser = userList[0];
+    expect(savedUser.password).not.toBe('P4word');
   });
 });
