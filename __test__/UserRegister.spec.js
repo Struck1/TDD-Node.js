@@ -2,13 +2,42 @@ const request = require('supertest');
 const app = require('../src/app');
 const User = require('../src/user/User');
 const sequalize = require('../src/config/database');
+const SMTPServer = require('smtp-server').SMTPServer;
 
-beforeAll(() => {
-  return sequalize.sync();
+let lastEmail, server;
+let simulateSmtpFailute = false;
+
+beforeAll(async () => {
+  server = new SMTPServer({
+    authOptional: true,
+    onData(stream, session, callback) {
+      let mailBody;
+      stream.on('data', (data) => {
+        mailBody += data.toString();
+      });
+      stream.on('end', () => {
+        if (simulateSmtpFailute) {
+          const err = new Error('Invalid mailbox');
+          err.responseCode = 533;
+          return callback(err);
+        }
+        lastEmail = mailBody;
+        callback();
+      });
+    },
+  });
+  await server.listen(8587, 'localhost');
+
+  await sequalize.sync();
 });
 
 beforeEach(() => {
+  simulateSmtpFailute = false;
   return User.destroy({ truncate: true });
+});
+
+afterAll(async () => {
+  await server.close();
 });
 
 const validUser = {
@@ -110,6 +139,122 @@ describe('User Registration', () => {
     const response = await postUser(user);
     const body = response.body;
     expect(body.validationErrors[field]).toBe(expectedMessage);
+  });
+
+  it('return validation error when email in use', async () => {
+    await User.create({ ...validUser });
+    const response = await postUser();
+    const body = response.body;
+    expect(body.validationErrors.email).toBe('Email in use');
+  });
+
+  it('return validation error username is null and email is in use', async () => {
+    await User.create({ ...validUser });
+    const response = await postUser({
+      username: null,
+      email: 'user@user.com',
+      password: 'P4ssword',
+    });
+    const body = response.body;
+    expect(Object.keys(body.validationErrors)).toEqual(['username', 'email']);
+  });
+
+  it('create user in inactive mode', async () => {
+    await postUser();
+    const users = await User.findAll();
+    const savedUser = users[0];
+    expect(savedUser.inactive).toBe(true);
+  });
+
+  it('create user in inactive mode request body contains inactive false', async () => {
+    const newUser = { ...validUser, inactive: false };
+    await postUser(newUser);
+    const users = await User.findAll();
+    const savedUser = users[0];
+    expect(savedUser.inactive).toBe(true);
+  });
+
+  it('create an activationToken for user', async () => {
+    await postUser();
+    const users = await User.findAll();
+    const savedUser = users[0];
+    expect(savedUser.activationToken).toBeTruthy();
+    //null, undefiend, "", 0, false => falsy
+  });
+
+  it('send activation email with activationToken', async () => {
+    await postUser();
+    const users = await User.findAll();
+    const savedUser = users[0];
+    expect(lastEmail).toContain('user@user.com');
+    expect(lastEmail).toContain(savedUser.activationToken);
+  });
+
+  it('returns 502 when sending email fails', async () => {
+    simulateSmtpFailute = true;
+    const response = await postUser();
+    expect(response.status).toBe(502);
+  });
+
+  it('returns Email fail message when sending email fail', async () => {
+    simulateSmtpFailute = true;
+    const response = await postUser();
+    expect(response.body.message).toBe('Email fail');
+  });
+
+  it('not save user to database if activation email fails', async () => {
+    simulateSmtpFailute = true;
+    await postUser();
+    const users = await User.findAll();
+    expect(users.length).toBe(0);
+  });
+
+  it('activates the account when correct token is send ', async () => {
+    await postUser();
+    let users = await User.findAll();
+    const token = users[0].activationToken;
+
+    await request(app)
+      .post('/api/1.0/users/token/' + token)
+      .send();
+
+    users = await User.findAll();
+    expect(users[0].inactive).toBe(false);
+  });
+
+  it('removes the token ', async () => {
+    await postUser();
+    let users = await User.findAll();
+    const token = users[0].activationToken;
+
+    await request(app)
+      .post('/api/1.0/users/token/' + token)
+      .send();
+
+    users = await User.findAll();
+    expect(users[0].activationToken).toBeFalsy();
+  });
+
+  it('invalid token', async () => {
+    await postUser();
+    const token = 'Invalid token';
+
+    await request(app)
+      .post('/api/1.0/users/token/' + token)
+      .send();
+
+    const users = await User.findAll();
+    expect(users[0].inactive).toBe(true);
+  });
+
+  it('return bad request when token is wrong', async () => {
+    await postUser();
+    const token = 'Invalid token';
+    const response = await request(app)
+      .post('/api/1.0/users/token/' + token)
+      .send();
+
+    expect(response.status).toBe(400);
   });
 
   /*

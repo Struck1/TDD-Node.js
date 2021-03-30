@@ -33,7 +33,19 @@ router.post(
     .bail()
     .isLength({ min: 4, max: 32 })
     .withMessage('Must have min 4 and max 32 characters'),
-  check('email').notEmpty().withMessage('Email cannot be null').bail().isEmail().withMessage('Email is not valid'),
+  check('email')
+    .notEmpty()
+    .withMessage('Email cannot be null')
+    .bail()
+    .isEmail()
+    .withMessage('Email is not valid')
+    .bail()
+    .custom(async (email) => {
+      const user = await userService.findByEmail(email);
+      if (user) {
+        throw new Error('Email in use');
+      }
+    }),
   check('password')
     .notEmpty()
     .withMessage('Password cannot be null')
@@ -50,9 +62,23 @@ router.post(
       errors.array().forEach((error) => (validationErrors[error.param] = error.msg));
       return res.status(400).send({ validationErrors: validationErrors });
     }
-    await userService.save(req.body);
-    return res.send({ message: 'User created' });
+    try {
+      await userService.save(req.body);
+      return res.send({ message: 'User created' });
+    } catch (error) {
+      return res.status(502).send({ message: error.message });
+    }
   }
 );
+
+router.post('/api/1.0/users/token/:token', async (req, res) => {
+  const token = req.params.token;
+  try {
+    await userService.activate(token);
+  } catch (error) {
+    res.status(400).send();
+  }
+  res.send();
+});
 
 module.exports = router;

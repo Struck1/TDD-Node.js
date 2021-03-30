@@ -16,6 +16,13 @@ User.init(
     password: {
       type: Sequalize.STRING,
     },
+    inactive: {
+      type: Sequalize.BOOLEAN,
+      defaultValue: true,
+    },
+    activationToken: {
+      type: Sequalize.STRING,
+    },
   },
   {
     sequelize: sequalize,
