@@ -159,6 +159,17 @@ describe('User Registration', () => {
     expect(Object.keys(body.validationErrors)).toEqual(['username', 'email']);
   });
 
+  it('return validation error failure message ', async () => {
+    const response = await postUser({
+      username: null,
+      email: 'user@user.com',
+      password: 'P4ssword',
+    });
+
+    const body = response.body;
+    expect(body.message).toEqual('Validation failure');
+  });
+
   it('create user in inactive mode', async () => {
     await postUser();
     const users = await User.findAll();
@@ -255,6 +266,47 @@ describe('User Registration', () => {
       .send();
 
     expect(response.status).toBe(400);
+  });
+
+  describe('Error model', () => {
+    it('returns path, timestamp, message and validation errors', async () => {
+      const response = await postUser({ ...validUser, username: null });
+      const body = response.body;
+      expect(Object.keys(body)).toEqual(['path', 'timestamp', 'message', 'validationErrors']);
+    });
+
+    it('returns path, timestamp and message when request fail', async () => {
+      const token = 'Invalid-token';
+      const response = await request(app)
+        .post('/api/1.0/users/token/' + token)
+        .send();
+
+      const body = response.body;
+      console.log(body);
+      expect(Object.keys(body)).toEqual(['path', 'timestamp', 'message']);
+    });
+
+    it('returns path in the error body', async () => {
+      const token = 'Invalid-token';
+      const response = await request(app)
+        .post('/api/1.0/users/token/' + token)
+        .send();
+      const body = response.body;
+      expect(body.path).toEqual(`/api/1.0/users/token/${token}`);
+    });
+
+    it('returns timestamp in miliseconds', async () => {
+      const nowInMillis = new Date().getTime();
+      const fiveSecondsLater = nowInMillis + 5 * 1000;
+      const token = 'Invalid-token';
+      const response = await request(app)
+        .post('/api/1.0/users/token/' + token)
+        .send();
+      const body = response.body;
+      console.log(body.timestamp);
+      expect(body.timestamp).toBeGreaterThan(nowInMillis);
+      expect(body.timestamp).toBeLessThan(fiveSecondsLater);
+    });
   });
 
   /*
