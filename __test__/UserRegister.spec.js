@@ -282,7 +282,6 @@ describe('User Registration', () => {
         .send();
 
       const body = response.body;
-      console.log(body);
       expect(Object.keys(body)).toEqual(['path', 'timestamp', 'message']);
     });
 
@@ -303,7 +302,6 @@ describe('User Registration', () => {
         .post('/api/1.0/users/token/' + token)
         .send();
       const body = response.body;
-      console.log(body.timestamp);
       expect(body.timestamp).toBeGreaterThan(nowInMillis);
       expect(body.timestamp).toBeLessThan(fiveSecondsLater);
     });

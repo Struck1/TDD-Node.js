@@ -1,0 +1,97 @@
+const request = require('supertest');
+const app = require('../src/app');
+const User = require('../src/user/User');
+const sequalize = require('../src/config/database');
+
+beforeAll(async () => {
+  await sequalize.sync();
+});
+
+beforeEach(() => {
+  return User.destroy({ truncate: true });
+});
+
+const getUsers = () => {
+  return request(app).get('/api/1.0/users');
+};
+
+const createUser = async (activeUser, inactiveUser = 0) => {
+  for (let i = 0; i < activeUser + inactiveUser; i++) {
+    await User.create({
+      username: `user${i + 1}`,
+      email: `user${i + 1}@mail.com`,
+      inactive: i >= activeUser,
+    });
+  }
+};
+
+describe('Listening users', () => {
+  it('return 200 OK', async () => {
+    const response = await getUsers();
+    expect(response.status).toBe(200);
+  });
+
+  it('returns page object as res body', async () => {
+    const response = await getUsers();
+    const body = response.body;
+    expect(body).toEqual({
+      content: [],
+      page: 0,
+      size: 10,
+      totalPages: 0,
+    });
+  });
+
+  it('return 10 users in page when there are 11 users in db', async () => {
+    await createUser(11);
+    const users = await getUsers();
+    expect(users.body.content.length).toEqual(10);
+  });
+
+  it('return 6 users in page when 6 active and 5 inactive users', async () => {
+    await createUser(6, 5);
+    const users = await getUsers();
+    expect(users.body.content.length).toEqual(6);
+  });
+
+  it('returns only id, username and mail in content', async () => {
+    await createUser(6, 5);
+    const users = await getUsers();
+    const user = users.body.content[0];
+    expect(Object.keys(user)).toEqual(['id', 'username', 'email']);
+  });
+
+  it('returns 2 total page where there are  15 active 7 inactive user', async () => {
+    await createUser(15, 7);
+    const users = await getUsers();
+    const user = users.body;
+    expect(user.totalPages).toBe(2);
+  });
+
+  it('first page is zero', async () => {
+    await createUser(11);
+    const users = await getUsers().query({ page: -5 });
+    expect(users.body.page).toBe(0);
+  });
+
+  it('return 5 users, size is set 5 request parameter', async () => {
+    await createUser(11);
+    const users = await getUsers().query({ size: 5 });
+    expect(users.body.content.length).toBe(5);
+    expect(users.body.size).toBe(5);
+  });
+
+  it('returns 10 users, if size parameter > 10', async () => {
+    await createUser(11);
+    const users = await getUsers().query({ size: 10000 });
+    expect(users.body.content.length).toBe(10);
+    expect(users.body.size).toBe(10);
+  });
+
+  it('return page 0 and size 10, if page and size string value', async () => {
+    await createUser(11);
+    const users = await getUsers().query({ size: 'size', page: 'page' });
+    expect(users.body.page).toBe(0);
+    expect(users.body.size).toBe(10);
+  });
+});
