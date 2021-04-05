@@ -16,6 +16,7 @@
     "config": "^3.3.6",
     "express": "^4.17.1",
     "express-validator": "^6.10.0",
+    "jsonwebtoken": "^8.5.1",
     "nodemailer": "^6.5.0",
     "sequelize": "^6.6.2",
     "smtp-server": "^3.8.0",
@@ -51,16 +52,18 @@
     },
     "rules": {
       "eqeqeq": "warn",
-      "prettier/prettier": "warn"
+      "prettier/prettier": "warn",
+      "no-unused-vars": "off"
     }
   },
   "prettier": {
     "singleQuote": true,
     "printWidth": 120
   },
-  "jest":{
-    "watchPlugins":[
+  "jest": {
+    "watchPlugins": [
       "jest-watch-typeahead/filename",
-      "jest-watch-typeahead/testname"]    
+      "jest-watch-typeahead/testname"
+    ]
   }
 }

@@ -95,3 +95,41 @@ describe('Listening users', () => {
     expect(users.body.size).toBe(10);
   });
 });
+
+describe('Get users', () => {
+  const getUser = (id = 2) => {
+    return request(app).get(`/api/1.0/users'${id}`);
+  };
+
+  it('returns 404 when user not found ', async () => {
+    const response = await getUser();
+    expect(response.status).toBe(404);
+  });
+
+  it('return user not found error ', async () => {
+    const response = await request(app).get('/api/1.0/users/2');
+    expect(response.body.message).toBe('User not found');
+  });
+
+  it('returns 200 when an active user exist', async () => {
+    const user = await User.create({
+      username: 'user1',
+      email: 'emre@mail.com',
+      inactive: false,
+    });
+
+    const response = await request(app).get(`/api/1.0/users/${user.id}`);
+    expect(response.status).toBe(200);
+  });
+
+  it('returns 404 when the user is inactive', async () => {
+    const user = await User.create({
+      username: 'user1',
+      email: 'emre@mail.com',
+      inactive: true,
+    });
+
+    const response = await request(app).get(`/api/1.0/users/${user.id}`);
+    expect(response.status).toBe(404);
+  });
+});
