@@ -2,6 +2,7 @@ const request = require('supertest');
 const app = require('../src/app');
 const User = require('../src/user/User');
 const sequalize = require('../src/config/database');
+const bcrypt = require('bcrypt');
 
 beforeAll(async () => {
   await sequalize.sync();
@@ -11,16 +12,31 @@ beforeEach(() => {
   return User.destroy({ truncate: true });
 });
 
-const getUsers = () => {
-  return request(app).get('/api/1.0/users');
+const auth = async (options = {}) => {
+  let token;
+  if (options.auth) {
+    const response = await request(app).post('/api/1.0/auth').send(options.auth);
+    token = response.body.token;
+  }
+  return token;
+};
+
+const getUsers = (options = {}) => {
+  const agent = request(app).get('/api/1.0/users');
+  if (options.token) {
+    agent.set('Authorization', `Bearer ${options.token}`);
+  }
+  return agent;
 };
 
 const createUser = async (activeUser, inactiveUser = 0) => {
+  const hash = await bcrypt.hash('P4ssword', 10);
   for (let i = 0; i < activeUser + inactiveUser; i++) {
     await User.create({
       username: `user${i + 1}`,
       email: `user${i + 1}@mail.com`,
       inactive: i >= activeUser,
+      password: hash,
     });
   }
 };
@@ -131,5 +147,12 @@ describe('Get users', () => {
 
     const response = await request(app).get(`/api/1.0/users/${user.id}`);
     expect(response.status).toBe(404);
+  });
+
+  it('user when request has valid authorization', async () => {
+    await createUser(11);
+    const token = await auth({ auth: { email: 'user1@mail.com', password: 'P4ssword' } });
+    const response = await getUsers({ token: token });
+    expect(response.body.totalPages).toBe(1);
   });
 });
