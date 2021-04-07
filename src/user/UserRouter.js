@@ -5,7 +5,6 @@ const { check, validationResult } = require('express-validator');
 const ValidationException = require('../error/ValidationException');
 const pagination = require('../middleware/pagination');
 const ForbiddenException = require('../error/ForbiddenException');
-const tokenAuthentication = require('../middleware/tokenAuthentication');
 
 /*
 const validationUsername = async (req, res, next) => {
@@ -83,7 +82,7 @@ router.post('/api/1.0/users/token/:token', async (req, res, next) => {
   }
 });
 
-router.get('/api/1.0/users', pagination, tokenAuthentication, async (req, res) => {
+router.get('/api/1.0/users', pagination, async (req, res) => {
   const authenticatedUser = req.authenticatedUser;
   const { page, size } = req.pagination;
   const users = await userService.getUsers(page, size, authenticatedUser);
@@ -100,7 +99,7 @@ router.get('/api/1.0/users/:id', async (req, res, next) => {
   }
 });
 
-router.put('/api/1.0/users/:id', tokenAuthentication, async (req, res, next) => {
+router.put('/api/1.0/users/:id', async (req, res, next) => {
   const authenticatedUser = req.authenticatedUser;
 
   // eslint-disable-next-line eqeqeq
@@ -109,6 +108,17 @@ router.put('/api/1.0/users/:id', tokenAuthentication, async (req, res, next) => 
   }
   await userService.updateUser(req.params.id, req.body);
   return res.send();
+});
+
+router.delete('/api/1.0/users/:id', async (req, res, next) => {
+  const authenticatedUser = req.authenticatedUser;
+
+  // eslint-disable-next-line eqeqeq
+  if (!authenticatedUser || authenticatedUser.id != req.params.id) {
+    return next(new ForbiddenException('unauthroized user delete'));
+  }
+  await userService.deleteUser(req.params.id);
+  await res.send();
 });
 
 module.exports = router;

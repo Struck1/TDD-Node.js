@@ -9,7 +9,7 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  return User.destroy({ truncate: true });
+  return User.destroy({ truncate: { cascade: true } });
 });
 
 const userdata = { username: 'user1', email: 'user1@mail.com', password: 'P4ssword', inactive: false };

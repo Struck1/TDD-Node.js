@@ -3,13 +3,14 @@ const app = require('../src/app');
 const User = require('../src/user/User');
 const sequalize = require('../src/config/database');
 const bcrypt = require('bcrypt');
+const Token = require('../src/auth/Token');
 
 beforeAll(async () => {
   await sequalize.sync();
 });
 
 beforeEach(() => {
-  return User.destroy({ truncate: true });
+  return User.destroy({ truncate: { cascade: true } });
 });
 
 const userdata = { username: 'user1', email: 'user1@mail.com', password: 'P4ssword', inactive: false };
@@ -22,6 +23,14 @@ const addUser = async (user = { ...userdata }) => {
 
 const postAuthentication = async (credentials) => {
   return await request(app).post('/api/1.0/auth').send(credentials);
+};
+
+const logout = (options = {}) => {
+  const agent = request(app).post('/api/1.0/logout');
+  if (options.token) {
+    agent.set('Authorization', `Bearer ${options.token}`);
+  }
+  return agent.send();
 };
 
 describe('User auth', () => {
@@ -65,5 +74,79 @@ describe('User auth', () => {
     await addUser();
     const response = await postAuthentication({ email: 'user1@mail.com', password: 'P4ssword' });
     expect(response.body.token).not.toBeUndefined();
+  });
+});
+
+describe('Logout', () => {
+  it('returns 200 ok logout', async () => {
+    const response = await logout();
+    expect(response.status).toBe(200);
+  });
+
+  it('removes the token from databese', async () => {
+    await addUser();
+    const response = await postAuthentication({ email: 'user1@mail.com', password: 'P4ssword' });
+    const token = response.body.token;
+    await logout({ token: token });
+    const storedToken = await Token.findOne({ where: { token: token } });
+    expect(storedToken).toBeNull();
+  });
+});
+
+describe('token expiration', () => {
+  const updateUser = async (id = 5, body = null, options = {}) => {
+    let agent = request(app);
+
+    agent = request(app).put('/api/1.0/users/' + id);
+    if (options.token) {
+      agent.set('Authorization', `Bearer ${options.token}`);
+    }
+    return agent.send(body);
+  };
+
+  it('returns 403 when token older than 1 week', async () => {
+    const savedUser = await addUser();
+    const token = 'test';
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000 - 1);
+    await Token.create({
+      token: token,
+      userId: savedUser.id,
+      lastUsedAt: oneWeekAgo,
+    });
+    const validUpdate = { username: 'user1Update' };
+    const response = await updateUser(savedUser.id, validUpdate, { token: token });
+    expect(response.status).toBe(403);
+  });
+
+  it('refreshes lastUserAt when unexpired token is used ', async () => {
+    const savedUser = await addUser();
+    const token = 'test';
+    const fourDaysAgo = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000);
+    await Token.create({
+      token: token,
+      userId: savedUser.id,
+      lastUsedAt: fourDaysAgo,
+    });
+    const validUpdate = { username: 'user1Update' };
+    const rightBeforeSendingRequest = new Date();
+    await updateUser(savedUser.id, validUpdate, { token: token });
+    const tokenInDB = await Token.findOne({ where: { token: token } });
+    expect(tokenInDB.lastUsedAt.getTime()).toBeGreaterThan(rightBeforeSendingRequest.getTime());
+  });
+
+  it('refreshes lastUserAt when unexpired token is used  for unauthendicated', async () => {
+    const savedUser = await addUser();
+    const token = 'test';
+    const fourDaysAgo = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000);
+    await Token.create({
+      token: token,
+      userId: savedUser.id,
+      lastUsedAt: fourDaysAgo,
+    });
+
+    const rightBeforeSendingRequest = new Date();
+    await request(app).get('/api/1.0/users/5').set('Authorization', `Bearer ${token}`);
+    const tokenInDB = await Token.findOne({ where: { token: token } });
+    expect(tokenInDB.lastUsedAt.getTime()).toBeGreaterThan(rightBeforeSendingRequest.getTime());
   });
 });
